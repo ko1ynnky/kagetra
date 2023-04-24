@@ -185,7 +185,7 @@ class MainApp < Sinatra::Base
           end
         }
         if namespace == "wiki" then
-          r = system("scripts/copy-to-ut-karuta.sh #{params[:id]} #{target_file}")
+          r = system("scripts/copy-to-ut-karuta.sh #{params[:id]} #{target_file} >/tmp/copy-to-ut.log 2>/tmp/copy-to-ut.err")
           if r then
             {result:"OK"}
           else

@@ -426,6 +426,7 @@ define (require, exports, module) ->
       $("<option>",opts)[0].outerHTML
 
     album_thumb: (x,new_window) ->
+      return "" unless x.thumb    
       target = if new_window then "target='_blank'" else ""
       path = "/static/album/thumb/#{x.thumb.id}.#{x.rotate}"
       "<a #{target} href='album#item/#{x.id}' data-id='#{x.id}'>" +

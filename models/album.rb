@@ -55,7 +55,8 @@ class AlbumItem < Sequel::Model(:album_items)
   end
 
   def id_with_thumb
-    self.select_attr(:id,:rotate).merge({thumb:self.thumb.select_attr(:id,:width,:height)})
+    thumb_data = self.thumb&.select_attr(:id,:width,:height)
+    self.select_attr(:id,:rotate).merge({thumb:thumb_data})
   end
 
   # 本来 tag_count や tag_names の更新は AlbumTag の :create, :destroy, :save Hookで行うべきだが

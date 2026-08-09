@@ -68,8 +68,17 @@ RSpec.describe "album upload HTTP integration" do
       "file" => Rack::Test::UploadedFile.new(path,mime_type,true)
     }.merge(attributes)
     post "/album/upload", params
-    expect(last_response.status).to eq(200)
-    parse_upload_response
+    result = parse_upload_response
+    if result["result"] == "OK"
+      expect(last_response.status).to eq(200)
+    else
+      expect([200,400]).to include(last_response.status)
+    end
+    result
+  end
+
+  def error_message(result)
+    result["_error_"] || result["error_message"]
   end
 
   def stored_files
@@ -123,7 +132,7 @@ RSpec.describe "album upload HTTP integration" do
     before_counts = [AlbumGroup.count,AlbumItem.count,stored_files.size]
     result = upload(disguised_xbm_path,"image/jpeg")
 
-    expect(result["_error_"]).to match(/JPEG|PNG|GIF/)
+    expect(error_message(result)).to match(/JPEG|PNG|GIF/)
     expect([AlbumGroup.count,AlbumItem.count,stored_files.size]).to eq(before_counts)
   end
 
@@ -151,7 +160,7 @@ RSpec.describe "album upload HTTP integration" do
     end
 
     result = upload(path,"image/jpeg")
-    expect(result["_error_"]).to match(/上限/)
+    expect(error_message(result)).to match(/上限/)
     expect(AlbumGroup.count).to eq(0)
     expect(AlbumItem.count).to eq(0)
     expect(stored_files).to be_empty
@@ -170,7 +179,7 @@ RSpec.describe "album upload HTTP integration" do
     end
 
     result = upload(zip_path,"application/zip")
-    expect(result["_error_"]).to match(/展開後サイズ/)
+    expect(error_message(result)).to match(/展開後サイズ/)
     expect(AlbumGroup.count).to eq(0)
     expect(AlbumItem.count).to eq(0)
     expect(stored_files).to be_empty

@@ -87,31 +87,8 @@ class MainApp < Sinatra::Base
     end
     post '/upload' do
       group = AlbumGroup[params[:group_id]]
-      filename = params[:file][:filename]
-      tempfile = params[:file][:tempfile]
-      min_index = 1 + (group.items_dataset.max(:group_index) || -1)
-      date = Date.today
-      target_dir = File.join(CONF_STORAGE_DIR,"album",date.year.to_s,date.month.to_s)
-      FileUtils.mkdir_p(target_dir)
-      case filename.downcase
-      when /\.zip$/
-        tmp = Dir.mktmpdir(nil,target_dir)
-        Zip::File.open(tempfile).select{|x|x.file? and [".jpg",".jpeg",".png",".gif"].any?{|s|x.name.downcase.end_with?(s)}}
-          .to_enum.with_index(min_index){|entry,i|
-            fn = File.join(tmp,i.to_s)
-            File.open(fn,"w"){|f|
-              f.write(entry.get_input_stream.read)
-            }
-            process_image(group,i,entry.name,fn)
-          }
-        {result:"OK",group_id:group.id}
-      when /\.jpe?g$/, /\.png$/, /\.gif$/
-        tfile = Kagetra::Utils.unique_file(@user,["img-",".dat"],target_dir)
-        FileUtils.cp(tempfile.path,tfile)
-        process_image(group,min_index,filename,tfile)
-        {result:"OK",group_id:group.id}
-      else
-        error_response("ファイルの拡張子が間違いです: #{filename.downcase}")
+      with_update do
+        upload_album_file(group,params[:file])
       end
     end
     delete '/group/:gid' do
@@ -511,53 +488,157 @@ class MainApp < Sinatra::Base
     img.resize!(scale)
   end
 
-  def process_image(group,index,orig_filename,tfile)
+  def process_image(group,index,orig_filename,tfile,expected_format=nil)
     abs_path = Pathname.new(tfile).realpath
-    item = AlbumItem.create(
-      group.select_attr(:place,:name).merge({
-        group_id:group.id,
-        date:group.start_at,
-        group_index:index,
-        owner_id:@user.id
-    }))
-    rel_path = abs_path.relative_path_from(Pathname.new(File.join(CONF_STORAGE_DIR,"album")).realpath)
-    img = Magick::Image::read(abs_path).first
-    prev_columns = img.columns
-    prev_rows = img.rows
-    rotated = img.auto_orient!.nil?.!
-    resize_to_pixels!(img,CONF_ALBUM_LARGE_SIZE)
-    if prev_columns != img.columns or prev_rows != img.rows or rotated
-      img.write(abs_path){self.quality = CONF_ALBUM_LARGE_QUALITY}
-    end
+    img,format = Kagetra::AlbumImageSecurity.read_image(abs_path,expected_format)
+    begin
+      item = AlbumItem.create(
+        group.select_attr(:place,:name).merge({
+          group_id:group.id,
+          date:group.start_at,
+          group_index:index,
+          owner_id:@user.id
+      }))
+      rel_path = abs_path.relative_path_from(Pathname.new(File.join(CONF_STORAGE_DIR,"album")).realpath)
+      prev_columns = img.columns
+      prev_rows = img.rows
+      rotated = img.auto_orient!.nil?.!
+      resize_to_pixels!(img,CONF_ALBUM_LARGE_SIZE)
+      if prev_columns != img.columns or prev_rows != img.rows or rotated
+        img.write("#{format}:#{abs_path}"){self.quality = CONF_ALBUM_LARGE_QUALITY}
+      end
 
-    AlbumPhoto.create(
-      album_item_id:item.id,
-      path:rel_path,
-      format: img.format,
-      width: img.columns,
-      height: img.rows
-    )
-    resize_to_pixels!(img,CONF_ALBUM_THUMB_SIZE)
-    img.write(abs_path.to_s+"_thumb"){self.quality = CONF_ALBUM_THUMB_QUALITY}
-    AlbumThumbnail.create(
-      album_item_id:item.id,
-      path:rel_path.to_s+"_thumb",
-      format: img.format,
-      width: img.columns,
-      height: img.rows
-    )
-    img.destroy!
+      AlbumPhoto.create(
+        album_item_id:item.id,
+        path:rel_path,
+        format: format,
+        width: img.columns,
+        height: img.rows
+      )
+      resize_to_pixels!(img,CONF_ALBUM_THUMB_SIZE)
+      img.write("#{format}:#{abs_path}_thumb"){self.quality = CONF_ALBUM_THUMB_QUALITY}
+      AlbumThumbnail.create(
+        album_item_id:item.id,
+        path:rel_path.to_s+"_thumb",
+        format: format,
+        width: img.columns,
+        height: img.rows
+      )
+    ensure
+      img.destroy!
+    end
   end
 
   def update_thumbnail(item)
     base = File.join(CONF_STORAGE_DIR,"album")
-    img = Magick::Image::read(File.join(base,item.photo.path)).first
-    resize_to_pixels!(img,CONF_ALBUM_THUMB_SIZE)
-    img.rotate!(item.rotate.to_i)
-    img.write(File.join(base,item.thumb.path)){self.quality = CONF_ALBUM_THUMB_QUALITY}
-    item.thumb.update(width:img.columns,height:img.rows)
-    img.destroy!
+    img,format = Kagetra::AlbumImageSecurity.read_image(File.join(base,item.photo.path),item.photo.format)
+    begin
+      resize_to_pixels!(img,CONF_ALBUM_THUMB_SIZE)
+      img.rotate!(item.rotate.to_i)
+      img.write("#{format}:#{File.join(base,item.thumb.path)}"){self.quality = CONF_ALBUM_THUMB_QUALITY}
+      item.thumb.update(width:img.columns,height:img.rows)
+    ensure
+      img.destroy!
+    end
   end
+
+  def upload_album_file(group,pfile)
+    raise Kagetra::AlbumImageSecurity::InvalidImage,"アップロードファイルがありません" if pfile.nil?
+
+    tempfile = pfile[:tempfile]
+    filename = pfile[:filename]
+    min_index = 1 + (group.items_dataset.max(:group_index) || -1)
+    date = Date.today
+    target_dir = File.join(CONF_STORAGE_DIR,"album",date.year.to_s,date.month.to_s)
+    FileUtils.mkdir_p(target_dir)
+    case filename.downcase
+    when /\.zip$/
+      Kagetra::AlbumImageSecurity.validate_size!(tempfile.path,Kagetra::AlbumImageSecurity::MAX_ZIP_BYTES)
+      tmp = Dir.mktmpdir(nil,target_dir)
+      created_paths = []
+      rejected_files = []
+      expanded_bytes = 0
+      next_index = min_index
+      begin
+        Zip::File.open(tempfile) do |archive|
+          file_entries = archive.select{|entry|entry.file?}
+          if file_entries.size > Kagetra::AlbumImageSecurity::MAX_ZIP_ENTRIES
+            raise Kagetra::AlbumImageSecurity::LimitExceeded,
+              "ZIP内のファイル数が上限（#{Kagetra::AlbumImageSecurity::MAX_ZIP_ENTRIES}件）を超えています"
+          end
+          image_entries = file_entries.select{|entry|
+            [".jpg",".jpeg",".png",".gif"].any?{|suffix|entry.name.downcase.end_with?(suffix)}
+          }
+          image_entries.each do |entry|
+            fn = File.join(tmp,next_index.to_s)
+            begin
+              remaining_bytes = Kagetra::AlbumImageSecurity::MAX_ZIP_EXPANDED_BYTES - expanded_bytes
+              if entry.size > Kagetra::AlbumImageSecurity::MAX_IMAGE_BYTES
+                raise Kagetra::AlbumImageSecurity::InvalidImage,
+                  "画像サイズが上限（#{Kagetra::AlbumImageSecurity::MAX_IMAGE_BYTES} bytes）を超えています"
+              end
+              if remaining_bytes <= 0 || entry.size > remaining_bytes
+                raise Kagetra::AlbumImageSecurity::LimitExceeded,
+                  "ZIPの展開後サイズが上限を超えています"
+              end
+              entry_limit = [Kagetra::AlbumImageSecurity::MAX_IMAGE_BYTES,remaining_bytes].min
+              input = entry.get_input_stream
+              begin
+                bytes = File.open(fn,"wb"){|output|
+                  Kagetra::AlbumImageSecurity.copy_with_limit(input,output,entry_limit)
+                }
+              ensure
+                input.close if input.respond_to?(:close)
+              end
+              expanded_bytes += bytes
+              format = Kagetra::AlbumImageSecurity.detect_format(fn)
+              process_image(group,next_index,entry.name,fn,format)
+              created_paths << fn
+              created_paths << fn+"_thumb"
+              next_index += 1
+            rescue Kagetra::AlbumImageSecurity::LimitExceeded
+              FileUtils.rm_f(fn)
+              FileUtils.rm_f(fn+"_thumb")
+              raise
+            rescue Kagetra::AlbumImageSecurity::InvalidImage => e
+              FileUtils.rm_f(fn)
+              FileUtils.rm_f(fn+"_thumb")
+              rejected_files << "#{entry.name}: #{e.message}"
+            rescue Exception
+              FileUtils.rm_f(fn)
+              FileUtils.rm_f(fn+"_thumb")
+              raise
+            end
+          end
+        end
+        if next_index == min_index
+          raise Kagetra::AlbumImageSecurity::InvalidImage,
+            "ZIP内に処理可能なJPEG・PNG・GIF画像がありません"
+        end
+      rescue Exception
+        created_paths.each{|path|FileUtils.rm_f(path)}
+        Dir.rmdir(tmp) if File.directory?(tmp) && Dir.entries(tmp).size == 2
+        raise
+      end
+      {result:"OK",group_id:group.id,rejected_files:rejected_files}
+    when /\.jpe?g$/, /\.png$/, /\.gif$/
+      Kagetra::AlbumImageSecurity.validate_size!(tempfile.path,Kagetra::AlbumImageSecurity::MAX_IMAGE_BYTES)
+      format = Kagetra::AlbumImageSecurity.detect_format(tempfile.path)
+      tfile = Kagetra::Utils.unique_file(@user,["img-",".dat"],target_dir)
+      begin
+        FileUtils.cp(tempfile.path,tfile)
+        process_image(group,min_index,filename,tfile,format)
+      rescue Exception
+        FileUtils.rm_f(tfile)
+        FileUtils.rm_f(tfile+"_thumb")
+        raise
+      end
+      {result:"OK",group_id:group.id}
+    else
+      error_response("ファイルの拡張子が間違いです: #{filename.downcase}")
+    end
+  end
+
   post '/album/upload' do
     res = with_update{
       group = if params[:group_id] then
@@ -573,32 +654,7 @@ class MainApp < Sinatra::Base
       if pfile.nil? then
         {result:"OK",group_id:group.id}
       else
-        tempfile = pfile[:tempfile]
-        filename = pfile[:filename]
-        min_index = 1 + (group.items_dataset.max(:group_index) || -1)
-        date = Date.today
-        target_dir = File.join(CONF_STORAGE_DIR,"album",date.year.to_s,date.month.to_s)
-        FileUtils.mkdir_p(target_dir)
-        case filename.downcase
-        when /\.zip$/
-          tmp = Dir.mktmpdir(nil,target_dir)
-          Zip::File.open(tempfile).select{|x|x.file? and [".jpg",".jpeg",".png",".gif"].any?{|s|x.name.downcase.end_with?(s)}}
-            .to_enum.with_index(min_index){|entry,i|
-              fn = File.join(tmp,i.to_s)
-              File.open(fn,"w"){|f|
-                f.write(entry.get_input_stream.read)
-              }
-              process_image(group,i,entry.name,fn)
-            }
-          {result:"OK",group_id:group.id}
-        when /\.jpe?g$/, /\.png$/, /\.gif$/
-          tfile = Kagetra::Utils.unique_file(@user,["img-",".dat"],target_dir)
-          FileUtils.cp(tempfile.path,tfile)
-          process_image(group,min_index,filename,tfile)
-          {result:"OK",group_id:group.id}
-        else
-          error_response("ファイルの拡張子が間違いです: #{filename.downcase}")
-        end
+        upload_album_file(group,pfile)
       end
     }
     "<div id='response'>#{res.to_json}</div>"
@@ -621,11 +677,13 @@ class MainApp < Sinatra::Base
     else
       attachment(filename,"inline")
       last_modified photo.updated_at
-      img = Magick::Image::read(path).first
-      img.rotate!(rotate)
-      blob = img.to_blob
-      img.destroy!
-      blob
+      img,_format = Kagetra::AlbumImageSecurity.read_image(path,photo.format)
+      begin
+        img.rotate!(rotate)
+        img.to_blob
+      ensure
+        img.destroy!
+      end
     end
   end
 

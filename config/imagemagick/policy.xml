@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policymap [
+  <!ELEMENT policymap (policy)*>
+  <!ATTLIST policymap xmlns CDATA #FIXED "">
+  <!ELEMENT policy EMPTY>
+  <!ATTLIST policy xmlns CDATA #FIXED "">
+  <!ATTLIST policy domain NMTOKEN #REQUIRED>
+  <!ATTLIST policy name NMTOKEN #IMPLIED>
+  <!ATTLIST policy pattern CDATA #IMPLIED>
+  <!ATTLIST policy rights NMTOKEN #IMPLIED>
+  <!ATTLIST policy value CDATA #IMPLIED>
+]>
+<policymap>
+  <!-- Album processing does not require external programs or filters. -->
+  <policy domain="delegate" rights="none" pattern="*"/>
+  <policy domain="filter" rights="none" pattern="*"/>
+
+  <!-- ImageMagick 6.9.10 uses case-sensitive policy patterns. -->
+  <policy domain="coder" rights="none" pattern="*"/>
+  <policy domain="coder" rights="read | write" pattern="JPEG"/>
+  <policy domain="coder" rights="read | write" pattern="PNG"/>
+  <policy domain="coder" rights="read | write" pattern="GIF"/>
+
+  <!-- Prevent indirect reads such as caption:@file. -->
+  <policy domain="path" rights="none" pattern="@*"/>
+
+  <!-- Conservative defaults for a 1 GiB production host. -->
+  <policy domain="resource" name="thread" value="1"/>
+  <!--
+    Do not set the ImageMagick 6 time resource in a long-lived Unicorn worker.
+    This version measures the limit from process-global pixel-cache state, so a
+    worker eventually rejects later, unrelated requests after the limit elapses.
+  -->
+  <policy domain="resource" name="memory" value="128MiB"/>
+  <policy domain="resource" name="map" value="256MiB"/>
+  <policy domain="resource" name="disk" value="512MiB"/>
+  <policy domain="resource" name="width" value="16KP"/>
+  <policy domain="resource" name="height" value="16KP"/>
+  <policy domain="resource" name="area" value="64MP"/>
+  <policy domain="resource" name="list-length" value="32"/>
+</policymap>

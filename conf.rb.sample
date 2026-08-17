@@ -98,6 +98,11 @@ CONF_ALBUM_LARGE_QUALITY = 92
 # アルバムサムネイルのサイズ(px)と画質
 CONF_ALBUM_THUMB_SIZE = 30000
 CONF_ALBUM_THUMB_QUALITY = 87
+# アルバムへ入力できるファイルサイズとZIP展開量の上限
+CONF_ALBUM_MAX_IMAGE_BYTES = 64 * 1024 * 1024
+CONF_ALBUM_MAX_ZIP_BYTES = 512 * 1024 * 1024
+CONF_ALBUM_MAX_ZIP_EXPANDED_BYTES = 1024 * 1024 * 1024
+CONF_ALBUM_MAX_ZIP_ENTRIES = 1000
 # 初ログイン時に表示されるメッセージ
 CONF_FIRST_LOGIN_MESSAGE = "競技かるた会用グループウェア「景虎」へようこそ．<br/>「その他」&rArr;「ユーザ設定」でパスワード変更できます．"
 

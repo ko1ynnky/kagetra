@@ -12,9 +12,6 @@ if development? then
 end
 require 'logger'
 require 'haml'
-require 'fileutils'
-require 'pathname'
-require 'tmpdir'
 
 require 'json'
 require 'base64'
@@ -25,7 +22,6 @@ require_relative '../libs/diff_match_patch-ruby/diff_match_patch.rb'
 G_DIMAPA = DiffPatchMatch.new
 require 'rmagick'
 require 'zip'
-require_relative './album_image_security'
 
 require 'nokogiri'
 

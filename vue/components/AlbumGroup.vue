@@ -99,7 +99,7 @@
       <div v-for="item in filteredItems" :key="item.id" class="p-2">
         <div class="card shadow-sm">
           <router-link :to="`/${item.id}`">
-            <img v-if="item.thumb" :src="`/static/album/thumb/${item.thumb.id}`" :class="item.no_comment ? 'card-img' : 'card-img-top'" :width="item.thumb.width" :height="item.thumb.height">
+            <img v-if="item.thumb" :src="`/static/album/thumb/${item.thumb.id}`" loading="lazy" :class="item.no_comment ? 'card-img' : 'card-img-top'" :width="item.thumb.width" :height="item.thumb.height">
           </router-link>
           <div v-if="!item.no_comment" class="card-body p-1">
             <p class="card-text">{{ item.comment }}</p>

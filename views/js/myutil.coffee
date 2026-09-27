@@ -430,7 +430,7 @@ define (require, exports, module) ->
       target = if new_window then "target='_blank'" else ""
       path = "/static/album/thumb/#{x.thumb.id}.#{x.rotate}"
       "<a #{target} href='album#item/#{x.id}' data-id='#{x.id}'>" +
-      "<img src='#{path}' style='width:#{x.thumb.width}px;height:#{x.thumb.height}px' />" +
+      "<img src='#{path}' loading='lazy' style='width:#{x.thumb.width}px;height:#{x.thumb.height}px' />" +
       "</a>"
 
 

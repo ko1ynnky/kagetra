@@ -46,7 +46,7 @@
         var g_user_name='#{get_permanent("bbs_name")}'
     %script
       var g_public_mode=#{!!@public_mode}
-    %script(src="/js/v#{G_RESOURCE_VERSION}/libs/requirejs/require.js" data-main="/js/main" data-start="#{yield_content(:js_start)}")
+    %script(src="/js/v#{G_RESOURCE_VERSION}/libs/requirejs/require.js" data-main="/js/main.js?album_lazy=20260928" data-start="#{yield_content(:js_start)}")
     %script
       var g_resource_version = '#{G_RESOURCE_VERSION}';
       requirejs.config({

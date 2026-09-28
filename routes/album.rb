@@ -44,7 +44,7 @@ class MainApp < Sinatra::Base
       r[:event_id] = group.event.id if group.event
       tags = Hash.new{[]}
       owners = Hash.new{[]}
-      r[:items] = group.items_dataset.order(Sequel.asc(:group_index)).map{|x|
+      r[:items] = group.items_dataset.order(Sequel.asc(:group_index)).eager(:thumb).all.map{|x|
         if x.tag_names then
           x.tag_names.each{|t|
             tags[t] <<= x.id
